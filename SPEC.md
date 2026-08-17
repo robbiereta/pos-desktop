@@ -1,10 +1,10 @@
-# POS Desktop — SPEC
+# POS Desktop — SPEC (100% Local)
 
-> Electron + React + Vite + SQLite (sql.js). App de escritorio para punto de venta con base de datos local y sync bidireccional con el backend de Hetzner.
+> Electron + React + Vite + SQLite. App de escritorio para punto de venta, **sin conexión al backend**. Todos los datos viven en SQLite local.
 
 ## 1. Concepto y Visión
 
-Una app de escritorio que corre 100% offline — el POS funciona sin internet, guarda todo en SQLite local, y cuando hay conexión sincroniza con `nefapi-cfdis` en Hetzner. El usuario tiene su sistema de siempre (ventas, productos, clientes, facturas) en una app nativa instalada en su máquina, sin depender del navegador.
+App de escritorio que funciona **100% offline** — sin internet, sin servidor externo. El POS guarda ventas, productos y clientes en SQLite local. Para gerar facturas CFDI se puede hacer desde el backend de Hetzner cuando haya conexión.
 
 Tech stack: **Electron + Vite + React + sql.js (SQLite embebido en WASM)**
 
@@ -14,8 +14,8 @@ Tech stack: **Electron + Vite + React + sql.js (SQLite embebido en WASM)**
 
 - **UI:** mismo diseño que el frontend web existente (colores #667eea / #764ba2, cards con border-radius)
 - **Fuente:** system-ui / Inter / Arial
-- **Layout:** sidebar navigation (Dashboard, POS, Productos, Clientes, Ventas, Facturas, Config) + contenido principal
-- **Tema:** claro,勿
+- **Layout:** sidebar navigation (Dashboard, POS, Productos, Clientes, Ventas, Config)
+- **Tema:** claro, profesional
 
 ---
 
@@ -23,177 +23,136 @@ Tech stack: **Electron + Vite + React + sql.js (SQLite embebido en WASM)**
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Electron Main Process                      │
-│  ├── SQLite (sql.js / WASM)                │
-│  ├── API sync service                      │
-│  ├── Auto-updater                          │
-│  └── IPC handlers                          │
+│  Electron Main Process                       │
+│  ├── SQLite (sql.js / WASM) — TODO local   │
+│  ├── IPC handlers                          │
+│  └── Auto-updater                          │
 ├─────────────────────────────────────────────┤
 │  Renderer (React + Vite)                   │
 │  ├── Pages: Dashboard, POS, Products,       │
-│  │   Clients, Sales, Invoices, Settings    │
-│  ├── Services: sqlite.js (IPC to main)      │
-│  └── Services: api.js (backend proxy)       │
+│  │   Clients, Sales, Config               │
+│  └── Services: sqlite.js (IPC to main)      │
 └─────────────────────────────────────────────┘
 ```
 
-**Sync strategy:**
-- Ventas → se crean localmente en SQLite, se encolan para sync
-- Productos / Clientes → se leen de SQLite (offline-first), sync cada 5 min o al reconnect
-- Cola de sync: tabla `sync_queue` en SQLite, se vacía cuando la API responde OK
-- Conflictos: gana el servidor (timestamp más reciente)
+**Sin sync** — todos los datos son locales. No hay cola de sincronización.
 
 ---
 
 ## 4. Módulos
 
 ### 4.1 POS (Punto de Venta)
-- Catálogo de productos desde SQLite
+- Catálogo de productos desde SQLite local
 - Carrito con cálculo de IVA 16%
 - quick-add product modal (crear producto inline)
-- Selección de cliente
+- Selección de cliente (o "PÚBLICO EN GENERAL")
 - Método / forma de pago
-- Al registrar venta: guardar en SQLite + encolar para sync
-- Impresión de ticket térmico (ventana de impresión del SO)
-- Si hay conexión: registrar venta en el backend inmediatamente
+- Registrar venta en SQLite
 
 ### 4.2 Productos
-- CRUD completo local en SQLite
-- Sync con `GET /api/products` del backend
+- CRUD completo en SQLite
 - Campos: nombre, sku, descripcion, precioVenta, categoria, claveSAT, activo
-- Búsqueda inline por nombre / SKU
 
 ### 4.3 Clientes
-- CRUD local en SQLite
-- Sync con `GET /api/clients`
-- RFC + nombre + usoCFDI + email
+- CRUD en SQLite
+- RFC + nombre + usoCFDI
 
 ### 4.4 Ventas
 - Lista de ventas locales
-- Estado: `pending_sync` | `synced` | `error`
-- Reintento manual de sync
-- Ver detalle de venta
+- Ver detalle
 
-### 4.5 Facturas (Cfdis)
-- Lista de facturas timbradas desde el backend
-- Generar factura desde una venta (copiar datos SAT)
-- Ver PDF del CFDI
-
-### 4.6 Configuración
-- URL del backend (por defecto: `https://cfdis.nefeshapps.site`)
-- Puerto del servidor local (default 5002)
+### 4.5 Configuración
 - Printer config (receipt width 58mm / 80mm)
-- Sync interval
-- Ver estado de sync
+- Reiniciar base de datos (opcional)
 
 ---
 
-## 5. Base de datos SQLite
+## 5. Base de datos SQLite (sql.js / WASM)
 
 ### Tablas locales
 
 ```sql
--- Productos
 CREATE TABLE products (
-  id TEXT PRIMARY KEY,
-  nombre TEXT NOT NULL,
-  sku TEXT,
-  descripcion TEXT,
-  precioVenta REAL NOT NULL,
+  id           TEXT PRIMARY KEY,
+  nombre       TEXT NOT NULL,
+  sku          TEXT,
+  descripcion  TEXT,
+  precioVenta  REAL NOT NULL DEFAULT 0,
   precioUnitario REAL,
-  categoria TEXT,
+  categoria    TEXT DEFAULT 'General',
   claveProdServ TEXT DEFAULT '01010101',
-  claveUnidad TEXT DEFAULT 'E48',
-  unidad TEXT DEFAULT 'Pieza',
-  activo INTEGER DEFAULT 1,
-  synced_at TEXT,
-  updated_at TEXT
+  claveUnidad  TEXT DEFAULT 'E48',
+  unidad       TEXT DEFAULT 'Pieza',
+  activo       INTEGER DEFAULT 1,
+  updated_at   TEXT DEFAULT (datetime('now'))
 );
 
--- Clientes
 CREATE TABLE clients (
-  id TEXT PRIMARY KEY,
-  nombre TEXT NOT NULL,
-  rfc TEXT,
-  usoCFDI TEXT DEFAULT 'G03',
+  id           TEXT PRIMARY KEY,
+  nombre       TEXT NOT NULL,
+  rfc          TEXT DEFAULT 'XAXX010101000',
+  usoCFDI      TEXT DEFAULT 'G03',
   regimenFiscal TEXT,
-  email TEXT,
-  telefono TEXT,
-  synced_at TEXT,
-  updated_at TEXT
+  email        TEXT,
+  telefono     TEXT,
+  updated_at   TEXT DEFAULT (datetime('now'))
 );
 
--- Ventas
 CREATE TABLE sales (
-  id TEXT PRIMARY KEY,
-  folio TEXT,
-  customer_id TEXT,
+  id            TEXT PRIMARY KEY,
+  folio         TEXT,
+  customer_id   TEXT,
   customer_name TEXT,
-  customer_rfc TEXT,
-  items TEXT,  -- JSON
-  subtotal REAL,
-  total REAL,
+  customer_rfc  TEXT,
+  items         TEXT,
+  subtotal      REAL,
+  total         REAL,
   total_impuestos REAL,
-  metodoPago TEXT,
-  formaPago TEXT,
-  status TEXT DEFAULT 'completed',
-  sync_status TEXT DEFAULT 'pending_sync',  -- pending_sync | synced | error
-  synced_at TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  metodoPago    TEXT DEFAULT 'PUE',
+  formaPago     TEXT DEFAULT '01',
+  status        TEXT DEFAULT 'completed',
+  created_at    TEXT DEFAULT (datetime('now'))
 );
 
--- Sync queue
-CREATE TABLE sync_queue (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  entity TEXT,   -- 'sale'
-  entity_id TEXT,
-  action TEXT,   -- 'create'
-  payload TEXT,  -- JSON
-  retries INTEGER DEFAULT 0,
-  last_error TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+CREATE TABLE config (
+  key   TEXT PRIMARY KEY,
+  value TEXT
 );
 ```
 
 ---
 
-## 6. API del main process (IPC)
+## 6. IPC del main process
 
 ```
 db:products:list      → [{...}]
-db:products:get       → {...}
 db:products:upsert    → {ok, id}
 db:products:delete    → {ok}
-
 db:clients:list       → [{...}]
 db:clients:upsert     → {ok, id}
-
 db:sales:create       → {ok, id}
 db:sales:list         → [{...}]
 db:sales:get          → {...}
-
-sync:trigger          → {queued, count}
-sync:status           → {pending, errors, lastSync}
-
 config:get            → {...}
 config:set            → {ok}
+app:getVersion        → string
 ```
 
 ---
 
 ## 7. Build
 
-- **electron-vite** (vite + electron, HMR en dev)
-- **electron-builder** para generar `.exe` (Windows), `.dmg` (macOS), `.AppImage` (Linux)
+- **electron-vite** (vite + electron)
+- **electron-builder** → `.exe` (Windows), `.AppImage` (Linux)
 - App name: `NefeshPOS`
-- Output: `dist/` (carpeta distribuible)
+- Output: `dist/`
 
 ---
 
 ## 8. Validación
 
 - App abre sin errores
-- POS permite agregar productos al carrito
+- POS permite agregar/quitar productos
 - Las ventas se guardan en SQLite
-- Sync queue tiene elementos cuando no hay conexión
-- Config permite cambiar URL del backend
+- Productos y clientes persisten al cerrar y reabrir
+- No requiere conexión a internet

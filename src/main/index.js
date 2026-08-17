@@ -2,14 +2,12 @@ const { app, BrowserWindow, shell, Menu } = require('electron');
 const path = require('path');
 const log = require('electron-log');
 const db = require('./database');
-const sync = require('./sync');
 const { register: registerIPC } = require('./ipc-handlers');
 
 log.transports.file.level = 'info';
-log.info('[Main] Starting NefeshPOS...');
+log.info('[Main] Starting NefeshPOS (local mode)...');
 
 let mainWindow = null;
-let backendUrl = 'https://cfdis.nefeshapps.site';
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,8 +23,6 @@ function createWindow() {
 
   const menu = Menu.buildFromTemplate([
     { label: 'Archivo', submenu: [
-      { label: 'Reiniciar sync', click: () => sync.triggerSync(backendUrl) },
-      { type: 'separator' },
       { label: 'Salir', role: 'quit' },
     ]},
     { label: 'Ver', submenu: [
@@ -52,12 +48,10 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await db.initDB();
-  const cfg = db.getConfig();
-  backendUrl = cfg.backendUrl || backendUrl;
-  registerIPC(() => backendUrl);
-  sync.start(backendUrl);
+  registerIPC();
   createWindow();
+  log.info('[Main] Window ready');
 });
 
-app.on('window-all-closed', () => { sync.stop(); if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (mainWindow === null) createWindow(); });
