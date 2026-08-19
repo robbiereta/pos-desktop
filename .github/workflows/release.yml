@@ -1,0 +1,152 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master, stage]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Stage: Linux build only ──────────────────────────────────────────────
+  build-linux:
+    if: github.ref == 'refs/heads/stage' || github.event.inputs.version == ''
+    name: Build Linux (AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Electron (Linux)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux AppImage dir
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nefesh-pos-linux
+          path: dist/linux-unpacked/
+          retention-days: 14
+
+  # ── Release: Full cross-platform ───────────────────────────────────────────
+  build-release:
+    if: github.ref == 'refs/heads/master' || github.event.inputs.version != ''
+    name: Build Release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            artifact: nefesh-pos-linux
+          - os: windows-latest
+            target: win
+            artifact: nefesh-pos-windows
+          - os: macos-latest
+            target: mac
+            artifact: nefesh-pos-macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --${{ matrix.target }} dir
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.target }}-unpacked/
+          retention-days: 30
+
+  # ── Create GitHub Release ─────────────────────────────────────────────────
+  release:
+    needs: build-release
+    if: github.ref == 'refs/heads/master' || github.event.inputs.version != ''
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: "NefeshPOS ${{ steps.version.outputs.VERSION }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/nefesh-pos-linux/**
+            artifacts/nefesh-pos-windows/**
+            artifacts/nefesh-pos-macos/**
+          body: |
+            ## NefeshPOS ${{ steps.version.outputs.VERSION }}
+
+            Sistema de punto de venta para negocios mexicanos — 100% offline.
+
+            ### Cambios
+            - Construcción automática desde GitHub Actions
+            - binaries para Linux, Windows y macOS
+
+            ### Descargar
+            - 🐧 Linux: `nefesh-pos-linux/`
+            - 🪟 Windows: `nefesh-pos-windows/NefeshPOS.exe`
+            - 🍎 macOS: `nefesh-pos-macos/NefeshPOS.app`
+
+            ---
+            Powered by [Nefesh Sistemas](https://nefeshapps.site)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
