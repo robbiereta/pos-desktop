@@ -5,7 +5,7 @@ const db = require('./database');
 const { register: registerIPC } = require('./ipc-handlers');
 
 log.transports.file.level = 'info';
-log.info('[Main] Starting NefeshPOS (local mode)...');
+log.info('[Main] Starting npos (local mode)...');
 
 let mainWindow = null;
 
@@ -13,7 +13,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280, height: 800,
     minWidth: 1024, minHeight: 680,
-    title: 'NefeshPOS',
+    title: 'npos',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false,

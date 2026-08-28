@@ -144,7 +144,7 @@ app:getVersion        → string
 
 - **electron-vite** (vite + electron)
 - **electron-builder** → `.exe` (Windows), `.AppImage` (Linux)
-- App name: `NefeshPOS`
+- App name: `npos` (formerly `NefeshPOS`)
 - Output: `dist/`
 
 ---

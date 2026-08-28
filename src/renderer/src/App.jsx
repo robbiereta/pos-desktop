@@ -36,7 +36,7 @@ export default function App() {
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <div className="sidebar-logo">✨ Nefesh<span>POS</span></div>
+        <div className="sidebar-logo">n<span>pos</span></div>
         <nav className="sidebar-nav">
           {NAV.map(item => (
             <div
@@ -49,7 +49,7 @@ export default function App() {
             </div>
           ))}
         </nav>
-        <div className="sidebar-footer">NefeshPOS v1.0 · SQLite local</div>
+        <div className="sidebar-footer">npos v1.0 · SQLite local</div>
       </aside>
       <main className="main-content">{render()}</main>
     </div>

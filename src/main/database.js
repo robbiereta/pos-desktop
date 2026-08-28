@@ -5,7 +5,7 @@ const log = require('electron-log');
 
 let db = null;
 
-const DB_PATH = () => path.join(app.getPath('userData'), 'nefesh-pos.db');
+const DB_PATH = () => path.join(app.getPath('userData'), 'npos.db');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS products (

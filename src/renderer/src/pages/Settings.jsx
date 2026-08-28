@@ -30,7 +30,7 @@ export default function Settings() {
       </div>
       <div className="card">
         <div className="card-title">ℹ️ Acerca de</div>
-        <p style={{fontSize:13}}><strong>NefeshPOS</strong> v1.0</p>
+        <p style={{fontSize:13}}><strong>npos</strong> v1.0</p>
         <p style={{fontSize:12,color:'#718096',marginTop:4}}>Electron + React + SQLite. 100% offline.</p>
       </div>
     </div>

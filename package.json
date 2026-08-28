@@ -1,7 +1,7 @@
 {
-  "name": "nefesh-pos",
+  "name": "npos-desktop",
   "version": "1.0.0",
-  "description": "Nefesh POS — Sistema de punto de venta con Electron + SQLite",
+  "description": "npos — Desktop POS app, Electron + SQLite (offline mode)",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -28,8 +28,8 @@
     "vite": "^5.4.14"
   },
   "build": {
-    "appId": "com.nefesh.pos",
-    "productName": "NefeshPOS",
+    "appId": "com.npos.desktop",
+    "productName": "npos",
     "directories": {
       "output": "dist"
     },
